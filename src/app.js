@@ -15,17 +15,46 @@ app.get('/', (_, res) => {
   })
 })
 
+app.get("/user/:id", checkToken, async (req, res) => {
+  const id = req.params.id;
+
+  const user = await User.findById(id, "-password");
+  if (!user) res.status(404).json({ msg: "Usuário não encontrado!" });
+
+  res.status(200).json({ user });
+});
+
+function checkToken(req, res, next) {
+  const authHeader = req.headers['authorization']
+  const token = authHeader && authHeader.split(" ")[1]
+
+  if (!token) res.status(401).json({ msg: 'Access denied' })
+
+  try {
+    const secret = process.env.SECRET;
+    jwt.verify(token, secret)
+
+    next()
+  } catch (err) {
+    console.log(err);
+    res.status(400).json({ msg: 'Invalid Token' })
+  }
+}
+
 app.post('/auth/register', async (req, res) => {
   const { name, email, password, confirmpassword, cpf } = req.body
 
   if (!name) res.status(422).json({ msg: 'Name required' })
   if (!email) res.status(422).json({ msg: 'Email required' })
   if (!password) res.status(422).json({ msg: 'Password required' })
+  if (password.length < 8) res.status(422).json({ msg: 'The password must have at least 8 characters' })
   if (!cpf) res.status(422).json({ msg: 'CPF required' })
   if (password !== confirmpassword) res.status(422).json({ msg: 'Passwords do not match' })
 
-  const userExists = await User.findOne({ cpf: cpf })
-  if (userExists) res.status(422).json({ msg: 'CPF already registered' })
+  const userExistsTriggedCpf = await User.findOne({ cpf: cpf })
+  if (userExistsTriggedCpf) res.status(422).json({ msg: 'CPF already registered' })
+  const userExistsTriggedEmail = await User.findOne({ email: email })
+  if (userExistsTriggedEmail) res.status(422).json({ msg: 'Email already registered' })
 
   const salt = await bcrypt.genSalt(18)
   const passwordHash = await bcrypt.hash(password, salt)
@@ -79,4 +108,3 @@ mongoose.connect(`mongodb+srv://${dbUser}:${dbPass}@cluster0.g4pmvs2.mongodb.net
   app.listen(8080)
   console.log('Connected to the database');
 }).catch((err) => console.log(err))
-
